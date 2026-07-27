@@ -1,5 +1,3 @@
-# backend/app/core/config.py
-
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,7 +7,19 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     APIFY_API_TOKEN: Optional[str] = None
-    APIFY_ACTOR_ID: str = "nH2AHrwxeTRJoN5hX"  # Default fallback jika tidak ada di .env
+    APIFY_ACTOR_ID: str = "nH2AHrwxeTRJoN5hX"
+    
+    # LLM Switcher
+    LLM_PROVIDER: str = "gemini"  # Options: "deepseek", "gemini"
+
+    # DeepSeek API Settings
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-flash-v4"
+
+    # Gemini API Settings
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

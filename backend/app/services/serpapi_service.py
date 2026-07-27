@@ -5,8 +5,7 @@ from app.core.database import supabase
 
 KEYWORDS = [
     "site:instagram.com universitas merdeka malang",
-    "site:instagram.com unmer malang",
-    "site:instagram.com unmer"
+    "site:instagram.com unmer malang"    
 ]
 
 class SerpAPIService:
@@ -25,7 +24,7 @@ class SerpAPIService:
                     "q": kw,
                     "api_key": settings.SERPAPI_KEY,
                     "num": 100,            # Up to 100 results
-                    "tbs": "qdr:d2",        # Published within last 48 hours (2 days)
+                    "tbs": "qdr:d3",        # Published within last 36 hours (3 days)
                     "hl": "id",            # Bahasa Indonesia
                     "gl": "id"             # Location: Indonesia
                 }
