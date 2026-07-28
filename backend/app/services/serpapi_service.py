@@ -5,7 +5,9 @@ from app.core.database import supabase
 
 KEYWORDS = [
     "site:instagram.com universitas merdeka malang",
-    "site:instagram.com unmer malang"    
+    "site:instagram.com unmer malang",
+    "site:tiktok.com unmer malang",
+    "site:tiktok.com universitas merdeka malang"    
 ]
 
 class SerpAPIService:

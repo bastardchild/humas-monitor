@@ -1,13 +1,68 @@
+# backend/app/services/scoring_service.py
+
+import re
 from typing import List, Dict, Any
 from app.core.database import supabase
 from app.models.schemas import ScoreOutput, ScoringBreakdown
 
+
 class UnmerScorer:
     """Rule-based Pydantic scoring system for Universitas Merdeka Malang."""
+
+    # List pola kata kunci / hashtag kampus lain di Malang
+    OTHER_MALANG_CAMPUSES = [
+        # Universitas Negeri Malang (UM)
+        r"\buniversitas negeri malang\b",
+        r"\b#universitasnegerimalang\b",
+        r"\b#pkkmbum\d*\b",
+        r"\b#mahasiswaum\b",
+        r"\b#mabaum\b",
+        # Universitas Brawijaya (UB)
+        r"\buniversitas brawijaya\b",
+        r"\b#universitasbrawijaya\b",
+        r"\b#mahasiswaub\b",
+        r"\b#ubmalang\b",
+        # Universitas Muhammadiyah Malang (UMM)
+        r"\buniversitas muhammadiyah malang\b",
+        r"\b#universitasmuhammadiyahmalang\b",
+        r"\b#umm\b",
+        r"\b#ummmalang\b",
+        # Politeknik Negeri Malang (POLINEMA)
+        r"\bpoliteknik negeri malang\b",
+        r"\b#polinema\b",
+        r"\b#polinemamalang\b",
+        # UIN Malang & Unisma
+        r"\buin maulana malik ibrahim\b",
+        r"\buin malang\b",
+        r"\buniversitas islam malang\b",
+        r"\b#unisma\b",
+    ]
 
     @staticmethod
     def calculate_score(title: str, snippet: str, url: str) -> tuple[float, ScoringBreakdown]:
         text = f"{title} {snippet} {url}".lower()
+
+        # 1. Cek apakah ada penyebutan nama UNMER secara eksplisit
+        has_unmer_kw = "unmer" in text or "universitas merdeka" in text
+
+        # 2. Cek apakah teks mengandung indikator kampus lain di Malang
+        has_other_campus = any(
+            re.search(pattern, text) for pattern in UnmerScorer.OTHER_MALANG_CAMPUSES
+        )
+
+        # Jika murni membahas kampus lain TANPA sebut UNMER -> Diskualifikasi (Skor 0)
+        if has_other_campus and not has_unmer_kw:
+            breakdown = ScoringBreakdown(
+                exact_match_found=False,
+                unmer_malang_match=False,
+                unmer_keyword_match=False,
+                malang_context_match=False,
+                base_points=0,
+                matched_terms=["disqualified: detected other malang campus"]
+            )
+            return 0.0, breakdown
+
+        # 3. Hitung skor normal jika lolos filter
         matched_terms = []
         points = 0
 
@@ -42,11 +97,11 @@ class UnmerScorer:
 
         return final_score, breakdown
 
+
 class ScoringService:
     @classmethod
     async def process_unscored_items(cls) -> Dict[str, Any]:
         # Query rows where id NOT IN (scored_results) or not yet scored
-        # Fetch scored raw_ids first
         scored_resp = supabase.table("scored_results").select("raw_id").not_.is_("scored_at", "null").execute()
         scored_ids = [row["raw_id"] for row in scored_resp.data] if scored_resp.data else []
 

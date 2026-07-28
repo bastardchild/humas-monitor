@@ -6,11 +6,12 @@ from typing import Dict, Any, List
 from app.core.config import settings
 from app.core.database import supabase
 
+
 class SentimentService:
 
     SYSTEM_PROMPT = """
 Anda adalah sistem AI analisis sentimen institusi Universitas Merdeka Malang (UNMER).
-Tugas Anda adalah menganalisis kumpulan postingan Instagram berbasis JSON:
+Tugas Anda adalah menganalisis kumpulan postingan media sosial (Instagram/TikTok) berbasis JSON:
 
 INSTRUKSI BAHASA (SANGAT PENTING):
 - WAJIB menggunakan BAHASA INDONESIA untuk seluruh isi teks pada field "reasoning" dan "engagement_context".
@@ -18,19 +19,19 @@ INSTRUKSI BAHASA (SANGAT PENTING):
 TUGAS ANALISIS:
 1. Klasifikasikan sentimen caption sebagai: "positive", "neutral", atau "negative".
 2. Hitung confidence sentiment_score antara 0 hingga 100.
-3. Evaluasi likes_count dan comments_count sebagai bagian konteks engagement dalam Bahasa Indonesia (contoh: "Keterlibatan tinggi", "Respon rendah", "Keterlibatan negatif tinggi").
+3. Evaluasi metrik engagement (likes, comments, views/shares jika ada) sebagai bagian konteks engagement dalam Bahasa Indonesia (contoh: "Keterlibatan tinggi", "Respon rendah", "Keterlibatan negatif tinggi").
 4. Berikan reasoning singkat maksimal 1 kalimat dalam Bahasa Indonesia.
 
 Tanggapi HANYA dengan format JSON valid sesuai skema ini:
 {
   "results": [
     {
-      "instagram_post_id": 123,
+      "post_id": 123,
       "cleaned_caption_id": 456,
       "sentiment": "positive|neutral|negative",
       "sentiment_score": 85,
       "reasoning": "Alasan singkat sentimen dalam Bahasa Indonesia.",
-      "engagement_context": "Evaluasi singkat likes & comments dalam Bahasa Indonesia."
+      "engagement_context": "Evaluasi singkat metrik engagement dalam Bahasa Indonesia."
     }
   ]
 }
@@ -98,13 +99,23 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
                 raise Exception(f"Gemini API Error [{response.status_code}]: {response.text}")
 
             ai_response = response.json()
-            # Ekstrak teks balasan dari struktur respons Gemini
             raw_content = ai_response["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(raw_content)
 
     @classmethod
-    async def analyze_unprocessed_captions(cls, batch_size: int = 15) -> Dict[str, Any]:
-        # 1. Ambil list instagram_post_id yang SUDAH dianalisis
+    async def _execute_llm(cls, user_prompt: str) -> Dict[str, Any]:
+        """Router eksekusi LLM berdasarkan provider yang dikonfigurasi."""
+        provider = settings.LLM_PROVIDER.lower()
+        if provider == "gemini":
+            return await cls._call_gemini(user_prompt), provider
+        elif provider == "deepseek":
+            return await cls._call_deepseek(user_prompt), provider
+        else:
+            raise ValueError(f"LLM_PROVIDER '{provider}' tidak dikenali. Gunakan 'deepseek' atau 'gemini'.")
+
+    @classmethod
+    async def analyze_unprocessed_instagram_captions(cls, batch_size: int = 15) -> Dict[str, Any]:
+        """Menganalisis sentimen postingan Instagram."""
         analyzed_res = (
             supabase.table("sentiment_analysis_results")
             .select("instagram_post_id")
@@ -116,10 +127,10 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
             if row.get("instagram_post_id")
         }
 
-        # 2. Query cleaned_instagram_captions di-join dengan instagram_posts, diurutkan cleaned_at DESC
         query = (
             supabase.table("cleaned_instagram_captions")
             .select("id, instagram_post_id, cleaned_caption, cleaned_at, instagram_posts(likes_count, comments_count)")
+            .eq("has_unmer_keyword", True)
             .order("cleaned_at", desc=True)
         )
 
@@ -130,42 +141,33 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
 
         if not unprocessed_rows:
             return {
+                "platform": "instagram",
                 "status": "skipped",
-                "message": "Semua data caption sudah dianalisis sentimennya.",
+                "message": "Semua data caption Instagram sudah dianalisis sentimennya.",
                 "processed_count": 0
             }
 
-        # 3. Ambil batch terbatas untuk efisiensi token
         batch_items = unprocessed_rows[:batch_size]
         payload_posts: List[Dict[str, Any]] = []
 
         for row in batch_items:
             ig_post = row.get("instagram_posts") or {}
             payload_posts.append({
-                "instagram_post_id": row["instagram_post_id"],
+                "post_id": row["instagram_post_id"],
                 "cleaned_caption_id": row["id"],
                 "caption": row.get("cleaned_caption", ""),
                 "likes_count": ig_post.get("likes_count", 0),
                 "comments_count": ig_post.get("comments_count", 0)
             })
 
-        user_prompt = f"Analisis sentimen & engagement untuk data berikut:\n{json.dumps(payload_posts, ensure_ascii=False)}"
+        user_prompt = f"Analisis sentimen & engagement Instagram berikut:\n{json.dumps(payload_posts, ensure_ascii=False)}"
+        parsed_data, provider = await cls._execute_llm(user_prompt)
 
-        # 4. Router LLM Provider berdasarkan settings.LLM_PROVIDER
-        provider = settings.LLM_PROVIDER.lower()
-        if provider == "gemini":
-            parsed_data = await cls._call_gemini(user_prompt)
-        elif provider == "deepseek":
-            parsed_data = await cls._call_deepseek(user_prompt)
-        else:
-            raise ValueError(f"LLM_PROVIDER '{provider}' tidak dikenali. Gunakan 'deepseek' atau 'gemini'.")
-
-        # 5. Parsing & Simpan Hasil ke Supabase
         saved_count = 0
         results_list = parsed_data.get("results", [])
 
         for item in results_list:
-            post_id = item.get("instagram_post_id")
+            post_id = item.get("post_id") or item.get("instagram_post_id")
             caption_id = item.get("cleaned_caption_id")
 
             if not post_id or not caption_id:
@@ -174,8 +176,8 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
             record = {
                 "instagram_post_id": post_id,
                 "cleaned_caption_id": caption_id,
-                "sentiment": item.get("sentiment", "neutral").lower(),
-                "sentiment_score": float(item.get("sentiment_score", 0.5)),
+                "sentiment": str(item.get("sentiment", "neutral")).lower(),
+                "sentiment_score": float(item.get("sentiment_score", 50.0)),
                 "reasoning": item.get("reasoning", ""),
                 "engagement_context": item.get("engagement_context", ""),
                 "raw_ai_json": item
@@ -187,12 +189,114 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
                 ).execute()
                 saved_count += 1
             except Exception as e:
-                print(f"[SentimentService Error] Gagal simpan post_id {post_id}: {e}")
+                print(f"[SentimentService Error IG] Gagal simpan post_id {post_id}: {e}")
 
         return {
+            "platform": "instagram",
             "status": "success",
             "provider_used": provider,
             "batch_size_requested": batch_size,
             "unprocessed_remaining": len(unprocessed_rows) - saved_count,
             "analyzed_and_saved": saved_count
+        }
+
+    @classmethod
+    async def analyze_unprocessed_tiktok_captions(cls, batch_size: int = 15) -> Dict[str, Any]:
+        """Menganalisis sentimen postingan TikTok berdasarkan skema presisi database Supabase."""
+        analyzed_res = (
+            supabase.table("tiktok_sentiment_analysis_results")
+            .select("tiktok_post_id")
+            .execute()
+        )
+        analyzed_post_ids = {
+            row["tiktok_post_id"] 
+            for row in (analyzed_res.data or []) 
+            if row.get("tiktok_post_id")
+        }
+
+        # Query join menggunakan nama kolom yang tepat sesuai skema
+        query = (
+            supabase.table("cleaned_tiktok_captions")
+            .select("id, tiktok_post_id, cleaned_caption, cleaned_at, tiktok_posts(likes_count, comments_count, plays_count, shares_count)")
+            .eq("has_unmer_keyword", True)
+            .order("cleaned_at", desc=True)
+        )
+
+        if analyzed_post_ids:
+            query = query.not_.in_("tiktok_post_id", list(analyzed_post_ids))
+
+        unprocessed_rows = query.execute().data or []
+
+        if not unprocessed_rows:
+            return {
+                "platform": "tiktok",
+                "status": "skipped",
+                "message": "Semua data caption TikTok sudah dianalisis sentimennya.",
+                "processed_count": 0
+            }
+
+        batch_items = unprocessed_rows[:batch_size]
+        payload_posts: List[Dict[str, Any]] = []
+
+        for row in batch_items:
+            tt_post = row.get("tiktok_posts") or {}
+            payload_posts.append({
+                "post_id": row["tiktok_post_id"],
+                "cleaned_caption_id": row["id"],
+                "caption": row.get("cleaned_caption", ""),
+                "likes_count": tt_post.get("likes_count", 0),
+                "comments_count": tt_post.get("comments_count", 0),
+                "plays_count": tt_post.get("plays_count", 0),
+                "shares_count": tt_post.get("shares_count", 0)
+            })
+
+        user_prompt = f"Analisis sentimen & engagement TikTok berikut:\n{json.dumps(payload_posts, ensure_ascii=False)}"
+        parsed_data, provider = await cls._execute_llm(user_prompt)
+
+        saved_count = 0
+        results_list = parsed_data.get("results", [])
+
+        for item in results_list:
+            post_id = item.get("post_id") or item.get("tiktok_post_id")
+            caption_id = item.get("cleaned_caption_id")
+
+            if not post_id or not caption_id:
+                continue
+
+            record = {
+                "tiktok_post_id": post_id,
+                "cleaned_caption_id": caption_id,
+                "sentiment": str(item.get("sentiment", "neutral")).lower(),
+                "sentiment_score": float(item.get("sentiment_score", 50.0)),
+                "reasoning": item.get("reasoning", ""),
+                "engagement_context": item.get("engagement_context", ""),
+                "raw_ai_json": item
+            }
+
+            try:
+                supabase.table("tiktok_sentiment_analysis_results").upsert(
+                    record, on_conflict="tiktok_post_id"
+                ).execute()
+                saved_count += 1
+            except Exception as e:
+                print(f"[SentimentService Error TikTok] Gagal simpan post_id {post_id}: {e}")
+
+        return {
+            "platform": "tiktok",
+            "status": "success",
+            "provider_used": provider,
+            "batch_size_requested": batch_size,
+            "unprocessed_remaining": len(unprocessed_rows) - saved_count,
+            "analyzed_and_saved": saved_count
+        }
+
+    @classmethod
+    async def analyze_all_unprocessed(cls, batch_size: int = 15) -> Dict[str, Any]:
+        """Menganalisis sentimen seluruh platform (Instagram & TikTok)."""
+        ig_res = await cls.analyze_unprocessed_instagram_captions(batch_size=batch_size)
+        tt_res = await cls.analyze_unprocessed_tiktok_captions(batch_size=batch_size)
+
+        return {
+            "instagram": ig_res,
+            "tiktok": tt_res
         }

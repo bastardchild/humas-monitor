@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     APIFY_API_TOKEN: Optional[str] = None
-    APIFY_ACTOR_ID: str = "nH2AHrwxeTRJoN5hX"
+    APIFY_ACTOR_ID: str = "apify/instagram-post-scraper"
+    APIFY_TIKTOK_ACTOR_ID: str = "clockworks/tiktok-scraper"
     
     # LLM Switcher
     LLM_PROVIDER: str = "gemini"  # Options: "deepseek", "gemini"
