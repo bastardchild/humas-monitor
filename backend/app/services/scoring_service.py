@@ -100,12 +100,13 @@ class UnmerScorer:
 
 class ScoringService:
     @classmethod
-    async def process_unscored_items(cls) -> Dict[str, Any]:
-        # Query rows where id NOT IN (scored_results) or not yet scored
-        scored_resp = supabase.table("scored_results").select("raw_id").not_.is_("scored_at", "null").execute()
+    async def process_unscored_social_items(cls) -> Dict[str, Any]:
+        """Proses scoring khusus untuk data mentah Sosial Media (raw_search_results)."""
+        # 1. Dapatkan daftar ID yang sudah discore dari tabel scored_results
+        scored_resp = supabase.table("scored_results").select("raw_id").execute()
         scored_ids = [row["raw_id"] for row in scored_resp.data] if scored_resp.data else []
 
-        # Fetch unscored records from raw_search_results
+        # 2. Ambil data mentah sosmed yang belum discore
         query = supabase.table("raw_search_results").select("*")
         if scored_ids:
             query = query.not_.in_("id", scored_ids)
@@ -121,22 +122,56 @@ class ScoringService:
 
             score, breakdown = UnmerScorer.calculate_score(title, snippet, url)
 
-            score_payload = ScoreOutput(
-                raw_id=raw_id,
-                url=url,
-                relevance_score=score,
-                scoring_details=breakdown
-            )
-
-            # Save to scored_results
+            # 3. Simpan ke tabel scored_results
             supabase.table("scored_results").upsert(
                 {
-                    "raw_id": score_payload.raw_id,
-                    "url": score_payload.url,
-                    "relevance_score": score_payload.relevance_score,
-                    "scoring_details": score_payload.scoring_details.model_dump()
+                    "raw_id": raw_id,
+                    "url": url,
+                    "relevance_score": score,
+                    "scoring_details": breakdown.model_dump()
                 },
                 on_conflict="raw_id"
+            ).execute()
+
+            processed_count += 1
+
+        return {
+            "unscored_items_found": len(unscored_rows),
+            "successfully_scored": processed_count
+        }
+
+    @classmethod
+    async def process_unscored_news_items(cls) -> Dict[str, Any]:
+        """Proses scoring khusus untuk data mentah Berita (raw_news_search_results)."""
+        # 1. Dapatkan daftar ID berita yang sudah discore dari tabel scored_news_results
+        scored_resp = supabase.table("scored_news_results").select("raw_news_id").execute()
+        scored_ids = [row["raw_news_id"] for row in scored_resp.data] if scored_resp.data else []
+
+        # 2. Ambil data mentah berita yang belum discore
+        query = supabase.table("raw_news_search_results").select("*")
+        if scored_ids:
+            query = query.not_.in_("id", scored_ids)
+        
+        unscored_rows = query.execute().data or []
+        processed_count = 0
+
+        for row in unscored_rows:
+            raw_news_id = row["id"]
+            url = row["url"]
+            title = row.get("title") or ""
+            snippet = row.get("snippet") or ""
+
+            score, breakdown = UnmerScorer.calculate_score(title, snippet, url)
+
+            # 3. Simpan ke tabel scored_news_results
+            supabase.table("scored_news_results").upsert(
+                {
+                    "raw_news_id": raw_news_id,
+                    "url": url,
+                    "relevance_score": score,
+                    "scoring_details": breakdown.model_dump()
+                },
+                on_conflict="raw_news_id"
             ).execute()
 
             processed_count += 1
