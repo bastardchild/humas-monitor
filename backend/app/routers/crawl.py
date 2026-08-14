@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from app.services.apify_service import ApifyService
+from app.services.firecrawl_service import FirecrawlService
 
 router = APIRouter(prefix="/crawl", tags=["Social Media Crawler"])
 
@@ -33,6 +34,21 @@ async def trigger_tiktok_crawl(
     """
     try:
         result = await ApifyService.crawl_recent_tiktok_posts(hours=hours, min_score=min_score)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/news")
+async def trigger_news_crawl(
+    hours: int = Query(default=48, ge=1, le=168, description="Rentang jam artikel berita yang akan di-crawl"),
+    min_score: float = Query(default=50.0, ge=0.0, le=100.0, description="Minimum relevance score untuk di-crawl")
+):
+    """
+    Trigger Firecrawl Scraper untuk mengambil isi artikel berita penuh
+    yang memiliki relevance_score >= min_score (default: 50.0).
+    """
+    try:
+        result = await FirecrawlService.crawl_recent_news_articles(hours=hours, min_score=min_score)
         return {"status": "success", "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
