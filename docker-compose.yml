@@ -6,13 +6,24 @@ services:
       - "8001:8000"
     env_file:
       - .env
+    environment:
+      - DATABASE_PATH=/data/app.db
+      - LITESTREAM_REPLICA_URL=${LITESTREAM_REPLICA_URL:-}
+      - LITESTREAM_S3_ENDPOINT=${LITESTREAM_S3_ENDPOINT:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - sqlite-data:/data
 
   frontend:
     build: ./frontend
     ports:
-      - "8502:8501"
+      - "8501:8501"
     environment:
       # Gunakan nama service "backend", BUKAN "localhost"
-      - BACKEND_URL=http://backend:8001/api/v1
+      - BACKEND_URL=http://backend:8000/api/v1
     depends_on:
       - backend
+
+volumes:
+  sqlite-data:

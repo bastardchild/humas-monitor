@@ -3,7 +3,8 @@
 import asyncio
 from fastapi import APIRouter, HTTPException
 from app.services.scoring_service import ScoringService
-from app.core.database import supabase
+from app.core.db import get_db
+import json
 
 router = APIRouter(prefix="/score", tags=["Scoring"])
 
@@ -52,14 +53,9 @@ async def process_all_scoring():
 async def get_scored_social_results(limit: int = 50):
     """Retrieve top scored social media results."""
     try:
-        data = (
-            supabase.table("scored_results")
-            .select("*, raw_search_results(title, snippet, keyword)")
-            .order("relevance_score", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return {"status": "success", "data": data.data}
+        with get_db() as db:
+            rows = db.execute("SELECT s.*, r.title, r.snippet, r.keyword FROM scored_results s LEFT JOIN raw_search_results r ON r.id=s.raw_id ORDER BY s.score DESC LIMIT ?", (limit,)).fetchall()
+            return {"status": "success", "data": [dict(r) for r in rows]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,13 +63,8 @@ async def get_scored_social_results(limit: int = 50):
 async def get_scored_news_results(limit: int = 50):
     """Retrieve top scored news results."""
     try:
-        data = (
-            supabase.table("scored_news_results")
-            .select("*, raw_news_search_results(title, snippet, keyword)")
-            .order("relevance_score", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return {"status": "success", "data": data.data}
+        with get_db() as db:
+            rows = db.execute("SELECT s.*, r.title, r.snippet, r.keyword FROM scored_news_results s LEFT JOIN raw_news_search_results r ON r.id=s.raw_news_id ORDER BY s.score DESC LIMIT ?", (limit,)).fetchall()
+            return {"status": "success", "data": [dict(r) for r in rows]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,7 +1,8 @@
 import httpx
 from typing import List, Dict, Any
 from app.core.config import settings
-from app.core.database import supabase
+from app.core.db import get_db
+import json
 from datetime import datetime, timedelta
 
 KEYWORDS = [
@@ -59,9 +60,9 @@ class SerpAPIService:
                     }
 
                     try:
-                        # Masuk ke tabel raw_search_results (Sosmed)
-                        res = supabase.table("raw_search_results").insert(payload).execute()
-                        if res.data:
+                        with get_db() as db:
+                            db.execute("INSERT INTO raw_search_results (keyword,url,title,snippet,raw_json) VALUES (?,?,?,?,?)",
+                                       (payload["keyword"], payload["url"], payload["title"], payload["snippet"], json.dumps(payload["raw_json"])))
                             total_saved += 1
                     except Exception:
                         duplicates_skipped += 1
@@ -116,8 +117,9 @@ class SerpAPIService:
                     }
 
                     try:
-                        res = supabase.table("raw_news_search_results").insert(payload).execute()
-                        if res.data:
+                        with get_db() as db:
+                            db.execute("INSERT INTO raw_news_search_results (keyword,url,title,snippet,raw_json) VALUES (?,?,?,?,?)",
+                                       (payload["keyword"], payload["url"], payload["title"], payload["snippet"], json.dumps(payload["raw_json"])))
                             total_saved += 1
                     except Exception:
                         duplicates_skipped += 1
@@ -238,16 +240,11 @@ class SerpAPIService:
                 }
 
                 try:
-                    # Menggunakan UPSERT dengan on_conflict agar tidak crash saat review_id sudah ada
-                    res = supabase.table("raw_google_reviews").upsert(
-                        payload, 
-                        on_conflict="review_id"
-                    ).execute()
-                    
-                    if res.data:
+                    with get_db() as db:
+                        db.execute("INSERT OR REPLACE INTO raw_google_reviews (place_id,review_json) VALUES (?,?)",
+                                   (place_id, json.dumps(payload)))
                         total_saved += 1
                 except Exception as e:
-                    # Catat sebagai duplikat / dilewati tanpa memicu 'raise' (agar tidak HTTP 500)
                     print(f"SKIPPED/ERROR saving review {review_id}: {e}")
                     duplicates_skipped += 1
 

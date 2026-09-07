@@ -4,7 +4,8 @@ import json
 import httpx
 from typing import Dict, Any, List
 from app.core.config import settings
-from app.core.database import supabase
+from app.core.db import get_db
+import json
 
 
 class SentimentService:
@@ -115,29 +116,12 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
 
     @classmethod
     async def analyze_unprocessed_instagram_captions(cls, batch_size: int = 15) -> Dict[str, Any]:
-        """Menganalisis sentimen postingan Instagram."""
-        analyzed_res = (
-            supabase.table("sentiment_analysis_results")
-            .select("instagram_post_id")
-            .execute()
-        )
-        analyzed_post_ids = {
-            row["instagram_post_id"] 
-            for row in (analyzed_res.data or []) 
-            if row.get("instagram_post_id")
-        }
-
-        query = (
-            supabase.table("cleaned_instagram_captions")
-            .select("id, instagram_post_id, cleaned_caption, cleaned_at, instagram_posts(likes_count, comments_count)")
-            .eq("has_unmer_keyword", True)
-            .order("cleaned_at", desc=True)
-        )
-
-        if analyzed_post_ids:
-            query = query.not_.in_("instagram_post_id", list(analyzed_post_ids))
-
-        unprocessed_rows = query.execute().data or []
+        with get_db() as db:
+            analyzed_post_ids={r[0] for r in db.execute("SELECT post_url FROM sentiment_analysis_results").fetchall()}
+            # simplified: cleaned where has_unmer, exclude already analyzed via post_url join
+            q="SELECT c.* FROM cleaned_instagram_captions c WHERE c.has_unmer_keyword=1 ORDER BY c.id DESC"
+            rows=db.execute(q).fetchall()
+            unprocessed_rows=[dict(r) for r in rows if r["post_url"] not in analyzed_post_ids]
 
         if not unprocessed_rows:
             return {
@@ -153,7 +137,7 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
         for row in batch_items:
             ig_post = row.get("instagram_posts") or {}
             payload_posts.append({
-                "post_id": row["instagram_post_id"],
+                "post_id": row["post_url"],
                 "cleaned_caption_id": row["id"],
                 "caption": row.get("cleaned_caption", ""),
                 "likes_count": ig_post.get("likes_count", 0),
@@ -184,10 +168,10 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
             }
 
             try:
-                supabase.table("sentiment_analysis_results").upsert(
-                    record, on_conflict="instagram_post_id"
-                ).execute()
-                saved_count += 1
+                with get_db() as db:
+                    db.execute("INSERT OR REPLACE INTO sentiment_analysis_results (post_url,sentiment,sentiment_score,reasoning) VALUES (?,?,?,?)",
+                               (str(post_id), record["sentiment"], record["sentiment_score"], record["reasoning"]))
+                saved_count+=1
             except Exception as e:
                 print(f"[SentimentService Error IG] Gagal simpan post_id {post_id}: {e}")
 
@@ -203,29 +187,10 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
     @classmethod
     async def analyze_unprocessed_tiktok_captions(cls, batch_size: int = 15) -> Dict[str, Any]:
         """Menganalisis sentimen postingan TikTok berdasarkan skema presisi database Supabase."""
-        analyzed_res = (
-            supabase.table("tiktok_sentiment_analysis_results")
-            .select("tiktok_post_id")
-            .execute()
-        )
-        analyzed_post_ids = {
-            row["tiktok_post_id"] 
-            for row in (analyzed_res.data or []) 
-            if row.get("tiktok_post_id")
-        }
-
-        # Query join menggunakan nama kolom yang tepat sesuai skema
-        query = (
-            supabase.table("cleaned_tiktok_captions")
-            .select("id, tiktok_post_id, cleaned_caption, cleaned_at, tiktok_posts(likes_count, comments_count, plays_count, shares_count)")
-            .eq("has_unmer_keyword", True)
-            .order("cleaned_at", desc=True)
-        )
-
-        if analyzed_post_ids:
-            query = query.not_.in_("tiktok_post_id", list(analyzed_post_ids))
-
-        unprocessed_rows = query.execute().data or []
+        with get_db() as db:
+            analyzed_post_ids={r[0] for r in db.execute("SELECT post_url FROM tiktok_sentiment_analysis_results").fetchall()}
+            rows=db.execute("SELECT * FROM cleaned_tiktok_captions WHERE has_unmer_keyword=1 ORDER BY id DESC").fetchall()
+            unprocessed_rows=[dict(r) for r in rows if r["post_url"] not in analyzed_post_ids]
 
         if not unprocessed_rows:
             return {
@@ -241,7 +206,7 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
         for row in batch_items:
             tt_post = row.get("tiktok_posts") or {}
             payload_posts.append({
-                "post_id": row["tiktok_post_id"],
+                "post_id": row["post_url"],
                 "cleaned_caption_id": row["id"],
                 "caption": row.get("cleaned_caption", ""),
                 "likes_count": tt_post.get("likes_count", 0),
@@ -274,10 +239,10 @@ Tanggapi HANYA dengan format JSON valid sesuai skema ini:
             }
 
             try:
-                supabase.table("tiktok_sentiment_analysis_results").upsert(
-                    record, on_conflict="tiktok_post_id"
-                ).execute()
-                saved_count += 1
+                with get_db() as db:
+                    db.execute("INSERT OR REPLACE INTO tiktok_sentiment_analysis_results (post_url,sentiment,sentiment_score,reasoning) VALUES (?,?,?,?)",
+                               (str(post_id), record["sentiment"], record["sentiment_score"], record["reasoning"]))
+                saved_count+=1
             except Exception as e:
                 print(f"[SentimentService Error TikTok] Gagal simpan post_id {post_id}: {e}")
 

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from apify_client import ApifyClient
 from app.core.config import settings
-from app.core.database import supabase
+from app.core.db import get_db
+import json
 
 
 def extract_shortcode(url: str) -> Optional[str]:
@@ -40,48 +41,15 @@ class ApifyService:
     ) -> Dict[str, Any]:
         cutoff_time = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
-        # 1. Ambil raw_id dari scored_results yang memiliki relevance_score >= min_score (50)
-        scored_res = (
-            supabase.table("scored_results")
-            .select("raw_id, relevance_score")
-            .gte("relevance_score", min_score)
-            .execute()
-        )
-        
-        high_score_raw_ids = [
-            row["raw_id"] for row in (scored_res.data or []) if row.get("raw_id")
-        ]
-
+        with get_db() as db:
+            high_score_raw_ids = [r[0] for r in db.execute("SELECT raw_id FROM scored_results WHERE score >= ?", (min_score,)).fetchall()]
         if not high_score_raw_ids:
-            return {
-                "status": "skipped",
-                "message": f"Tidak ada data hasil scoring dengan relevance_score >= {min_score}.",
-                "target_count": 0
-            }
-
-        # 2. Ambil raw_id dan short_code yang SUDAH pernah di-crawl di Supabase
-        scraped_res = (
-            supabase.table("instagram_posts")
-            .select("raw_id, short_code")
-            .execute()
-        )
-        
-        scraped_raw_ids = {
-            row["raw_id"] for row in (scraped_res.data or []) if row.get("raw_id")
-        }
-        scraped_shortcodes = {
-            row["short_code"] for row in (scraped_res.data or []) if row.get("short_code")
-        }
-
-        # 3. Ambil raw_search_results tanpa .ilike agar Supabase/Cloudflare tidak error 500
-        raw_res = (
-            supabase.table("raw_search_results")
-            .select("id, url, created_at")
-            .in_("id", high_score_raw_ids)
-            .gte("created_at", cutoff_time)
-            .execute()
-        )
-        raw_items = raw_res.data or []
+            return {"status": "skipped", "message": f"Tidak ada data hasil scoring dengan relevance_score >= {min_score}.", "target_count": 0}
+        with get_db() as db:
+            scraped_raw_ids = {r[0] for r in db.execute("SELECT raw_id FROM instagram_posts").fetchall() if r[0] is not None}
+            scraped_shortcodes = {r[0] for r in db.execute("SELECT short_code FROM instagram_posts").fetchall() if r[0] is not None}
+            ph=",".join("?"*len(high_score_raw_ids))
+            raw_items=[dict(r) for r in db.execute(f"SELECT id, url, created_at FROM raw_search_results WHERE id IN ({ph}) AND created_at >= ?", (*high_score_raw_ids, cutoff_time)).fetchall()]
 
         if not raw_items:
             return {
@@ -155,20 +123,13 @@ class ApifyService:
             }
 
             try:
-                supabase.table("instagram_posts").upsert(payload, on_conflict="post_url").execute()
-                saved_count += 1
+                with get_db() as db:
+                    db.execute("INSERT OR REPLACE INTO instagram_posts (raw_id, post_url, short_code, owner_username, caption, likes_count, comments_count, post_timestamp, raw_json) VALUES (?,?,?,?,?,?,?,?,?)",
+                               (payload["raw_id"], payload["post_url"], payload["short_code"], payload["owner_username"], payload["caption"], payload["likes_count"], payload["comments_count"], payload["post_timestamp"], json.dumps(payload)))
+                    saved_count+=1
             except Exception as e:
                 print(f"[ApifyService Error] Gagal menyimpan Instagram URL {input_url}: {e}")
-
-        return {
-            "status": "success",
-            "hours_window": hours,
-            "min_score": min_score,
-            "actor_id_used": settings.APIFY_ACTOR_ID,
-            "total_target_urls": len(targets),
-            "scraped_by_apify": len(dataset_items),
-            "saved_to_supabase": saved_count
-        }
+        return {"status":"success","hours_window":hours,"min_score":min_score,"actor_id_used":settings.APIFY_ACTOR_ID,"total_target_urls":len(targets),"scraped_by_apify":len(dataset_items),"saved_to_supabase":saved_count}
 
     @classmethod
     async def crawl_recent_tiktok_posts(
@@ -181,48 +142,15 @@ class ApifyService:
         """
         cutoff_time = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
-        # 1. Ambil raw_id dari scored_results
-        scored_res = (
-            supabase.table("scored_results")
-            .select("raw_id, relevance_score")
-            .gte("relevance_score", min_score)
-            .execute()
-        )
-        
-        high_score_raw_ids = [
-            row["raw_id"] for row in (scored_res.data or []) if row.get("raw_id")
-        ]
-
+        with get_db() as db:
+            high_score_raw_ids=[r[0] for r in db.execute("SELECT raw_id FROM scored_results WHERE score >= ?", (min_score,)).fetchall()]
         if not high_score_raw_ids:
-            return {
-                "status": "skipped",
-                "message": f"Tidak ada data hasil scoring dengan relevance_score >= {min_score}.",
-                "target_count": 0
-            }
-
-        # 2. Ambil raw_id & video_id yang SUDAH pernah di-crawl di tabel tiktok_posts
-        scraped_res = (
-            supabase.table("tiktok_posts")
-            .select("raw_id, video_id")
-            .execute()
-        )
-        
-        scraped_raw_ids = {
-            row["raw_id"] for row in (scraped_res.data or []) if row.get("raw_id")
-        }
-        scraped_video_ids = {
-            row["video_id"] for row in (scraped_res.data or []) if row.get("video_id")
-        }
-
-        # 3. Ambil raw_search_results tanpa .ilike
-        raw_res = (
-            supabase.table("raw_search_results")
-            .select("id, url, created_at")
-            .in_("id", high_score_raw_ids)
-            .gte("created_at", cutoff_time)
-            .execute()
-        )
-        raw_items = raw_res.data or []
+            return {"status":"skipped","message":f"Tidak ada data hasil scoring dengan relevance_score >= {min_score}.","target_count":0}
+        with get_db() as db:
+            scraped_raw_ids={r[0] for r in db.execute("SELECT raw_id FROM tiktok_posts").fetchall() if r[0] is not None}
+            scraped_video_ids={r[0] for r in db.execute("SELECT video_id FROM tiktok_posts").fetchall() if r[0] is not None}
+            ph=",".join("?"*len(high_score_raw_ids))
+            raw_items=[dict(r) for r in db.execute(f"SELECT id, url, created_at FROM raw_search_results WHERE id IN ({ph}) AND created_at >= ?", (*high_score_raw_ids, cutoff_time)).fetchall()]
 
         if not raw_items:
             return {
@@ -311,8 +239,10 @@ class ApifyService:
             }
 
             try:
-                supabase.table("tiktok_posts").upsert(payload, on_conflict="post_url").execute()
-                saved_count += 1
+                with get_db() as db:
+                    db.execute("INSERT OR REPLACE INTO tiktok_posts (raw_id, post_url, video_id, owner_username, owner_nickname, caption, likes_count, comments_count, shares_count, plays_count, post_timestamp, raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                               (payload["raw_id"], payload["post_url"], payload["video_id"], payload["owner_username"], payload["owner_nickname"], payload["caption"], payload["likes_count"], payload["comments_count"], payload["shares_count"], payload["plays_count"], payload["post_timestamp"], json.dumps(payload)))
+                    saved_count+=1
             except Exception as e:
                 print(f"[ApifyService Error] Gagal menyimpan TikTok URL {web_video_url}: {e}")
 

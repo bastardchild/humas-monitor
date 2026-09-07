@@ -7,7 +7,8 @@ from typing import Dict, Any, List
 from firecrawl import Firecrawl
 
 from app.core.config import settings
-from app.core.database import supabase
+from app.core.db import get_db
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -21,47 +22,15 @@ class FirecrawlService:
         min_score: float = 50.0
     ) -> Dict[str, Any]:
 
-        # 1. Ambil ID berita dari scored_news_results dengan skor >= min_score
-        scored_res = (
-            supabase.table("scored_news_results")
-            .select("raw_news_id, relevance_score")
-            .gte("relevance_score", min_score)
-            .execute()
-        )
-        
-        high_score_raw_news_ids = [
-            row["raw_news_id"] for row in (scored_res.data or []) if row.get("raw_news_id")
-        ]
-
+        with get_db() as db:
+            high_score_raw_news_ids = [r[0] for r in db.execute("SELECT raw_news_id FROM scored_news_results WHERE score >= ?", (min_score,)).fetchall()]
         if not high_score_raw_news_ids:
-            return {
-                "status": "skipped",
-                "message": f"Tidak ada data berita dengan relevance_score >= {min_score}.",
-                "target_count": 0
-            }
-
-        # 2. Ambil ID & URL yang sudah berhasil di-crawl
-        scraped_res = (
-            supabase.table("news_articles")
-            .select("raw_news_id, url")
-            .execute()
-        )
-        
-        scraped_raw_ids = {
-            row["raw_news_id"] for row in (scraped_res.data or []) if row.get("raw_news_id")
-        }
-        scraped_urls = {
-            row["url"] for row in (scraped_res.data or []) if row.get("url")
-        }
-
-        # 3. Ambil data berita mentah (Hapus .gte created_at agar tidak terfilter salah)
-        raw_res = (
-            supabase.table("raw_news_search_results")
-            .select("id, url, title, snippet")
-            .in_("id", high_score_raw_news_ids)
-            .execute()
-        )
-        raw_items = raw_res.data or []
+            return {"status":"skipped","message":f"Tidak ada data berita dengan score >= {min_score}.","target_count":0}
+        with get_db() as db:
+            scraped_raw_ids = {r[0] for r in db.execute("SELECT id FROM news_articles").fetchall()}
+            scraped_urls = {r[0] for r in db.execute("SELECT url FROM news_articles").fetchall()}
+            ph=",".join("?"*len(high_score_raw_news_ids))
+            raw_items=[dict(r) for r in db.execute(f"SELECT id, url, title, snippet FROM raw_news_search_results WHERE id IN ({ph})", tuple(high_score_raw_news_ids)).fetchall()]
 
         # 4. Filter URL yang belum di-crawl
         targets: List[Dict[str, Any]] = []
@@ -123,14 +92,11 @@ class FirecrawlService:
                         "raw_firecrawl_json": scrape_result.model_dump(),
                     }
 
-                    # Simpan ke Supabase
-                    res = supabase.table("news_articles").upsert(
-                        payload, 
-                        on_conflict="url"
-                    ).execute()
-
+                    with get_db() as db:
+                        db.execute("INSERT OR REPLACE INTO news_articles (url,title,description,content_markdown) VALUES (?,?,?,?)",
+                                   (payload["url"], payload["title"], payload["description"], payload["content_markdown"]))
                     await asyncio.sleep(1.0)
-                    return {"success": True, "url": url, "data": res.data}
+                    return {"success": True, "url": url}
 
                 except Exception as e:
                     logger.error(f"[Firecrawl Error] Gagal crawl {url}: {str(e)}", exc_info=True)

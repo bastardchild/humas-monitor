@@ -4,8 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Unmer Monitor API"
     SERPAPI_KEY: str
-    SUPABASE_URL: str
-    SUPABASE_KEY: str
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
+    DATABASE_PATH: str = "./data/app.db"
+    LITESTREAM_REPLICA_URL: Optional[str] = None
+    LITESTREAM_S3_ENDPOINT: Optional[str] = None
+    USE_SUPABASE: bool = False  # feature flag for rollback
     APIFY_API_TOKEN: Optional[str] = None
     APIFY_ACTOR_ID: str = "apify/instagram-post-scraper"
     APIFY_TIKTOK_ACTOR_ID: str = "clockworks/tiktok-scraper"

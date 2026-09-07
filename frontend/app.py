@@ -7,7 +7,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from supabase import create_client, Client
+import json
+import httpx  # frontend reads via backend API (SQLite)
 
 
 # -----------------------------------------------------------------------------
@@ -15,7 +16,7 @@ from supabase import create_client, Client
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="UNMER Monitor - Cross-Platform Sentiment Dashboard",
-    page_icon="📊",
+    page_icon=":material/analytics:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -29,12 +30,12 @@ if not st.user.is_logged_in:
     with col_b:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.image("https://unmer.ac.id/wp-content/uploads/2020/07/Branding_Putih-300x118.png", width=180)
-        st.title("🔒 UNMER Monitor")
+        st.title(":material/lock: UNMER Monitor")
         st.subheader("Cross-Platform Sentiment Dashboard")
         st.write("Silakan login menggunakan akun Google Anda untuk mengakses dashboard internal.")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        if st.button("🔑 Login dengan Google", type="primary", use_container_width=True):
+        if st.button(":material/vpn_key: Login dengan Google", type="primary", use_container_width=True):
             st.login()
             
     st.stop()
@@ -49,87 +50,50 @@ if ALLOWED_EMAILS and user_email not in ALLOWED_EMAILS:
     col_a, col_b, col_c = st.columns([1, 2, 1])
     with col_b:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.error(f"⛔ **Akses Ditolak!**\n\nEmail `{user_email}` tidak terdaftar untuk mengakses dashboard ini.")
+        st.error(f":material/block: **Akses Ditolak!**\n\nEmail `{user_email}` tidak terdaftar untuk mengakses dashboard ini.")
         st.caption("Silakan hubungi administrator jika Anda memerlukan akses.")
         
-        if st.button("🚪 Keluar / Ganti Akun", type="primary", use_container_width=True):
+        if st.button(":material/logout: Keluar / Ganti Akun", type="primary", use_container_width=True):
             st.logout()
             
     st.stop()
 
 # Custom CSS untuk UI Modern & Card Metrics
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300,0,0" rel="stylesheet" />
 <style>
-    .main { background-color: #f8f9fa; }
-    .metric-card {
-        background-color: #ffffff;
-        padding: 18px 22px;
-        border-radius: 12px;
-        border: 1px solid #e9ecef;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        text-align: center;
-    }
-    .metric-value {
-        font-size: 28px;
-        font-weight: 700;
-        color: #1e293b;
-    }
-    .metric-label {
-        font-size: 13px;
-        color: #64748b;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .badge-positive {
-        background-color: #d1fae5; color: #065f46; 
-        padding: 4px 10px; border-radius: 20px; font-weight: 600; font-size: 12px;
-    }
-    .badge-neutral {
-        background-color: #fef3c7; color: #92400e; 
-        padding: 4px 10px; border-radius: 20px; font-weight: 600; font-size: 12px;
-    }
-    .badge-negative {
-        background-color: #fee2e2; color: #991b1b; 
-        padding: 4px 10px; border-radius: 20px; font-weight: 600; font-size: 12px;
-    }
-    .badge-instagram {
-        background-color: #fce7f3; color: #be185d;
-        padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 11px;
-    }
-    .badge-tiktok {
-        background-color: #e0f2fe; color: #0369a1;
-        padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 11px;
-    }
-    .badge-google-review {
-        background-color: #fef9c3; color: #854d0e;
-        padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 11px;
-    }
-    .post-card {
-        background: #ffffff;
-        border-radius: 10px;
-        padding: 16px;
-        margin-bottom: 12px;
-        border: 1px solid #e2e8f0;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Share+Tech+Mono&display=swap');
+    .ms { font-family: 'Material Symbols Outlined'; font-weight: 300; font-style: normal; font-size: 18px; line-height: 1; vertical-align: middle; }
+    .stApp { background: #0a0f14; color: #e6f0e8; font-family: 'JetBrains Mono', monospace; font-size: 16px; line-height: 1.6; }
+    h1 { font-family: 'Share Tech Mono', monospace; font-size: 28px; color: #b8ffcc !important; letter-spacing: 0.04em; text-transform: uppercase; }
+    h2 { font-family: 'Share Tech Mono', monospace; font-size: 22px; color: #d0ffe0 !important; }
+    h3 { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: #e6f0e8 !important; font-weight: 600; }
+    p, span, div, label { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: #e6f0e8; }
+    small, .caption { font-size: 13px; color: #a8c0b0; }
+    .metric-card { background: #111e16; padding: 16px 18px; border-radius: 10px; border: 1px solid rgba(168,255,200,0.22); text-align: center; }
+    .metric-value { font-family: 'Share Tech Mono', monospace; font-size: 30px; color: #7affa8; }
+    .metric-label { font-size: 13px; color: #b0c8b8; letter-spacing: 0.08em; text-transform: uppercase; }
+    .badge-positive { background: #0d2a18; color: #e6fff0; border: 1px solid #1a6b3a; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600; }
+    .badge-neutral { background: #2a260d; color: #fff8cc; border: 1px solid #8a7a1a; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600; }
+    .badge-negative { background: #2a1218; color: #ffe6eb; border: 1px solid #8a2a3a; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600; }
+    .badge-instagram { background: #0d1e2a; color: #d0eaff; border: 1px solid #2a5a7a; font-size: 12px; }
+    .badge-tiktok { background: #0d1e16; color: #d0ffe8; border: 1px solid #2a6b4a; font-size: 12px; }
+    .badge-google-review { background: #1a1e2a; color: #e0e8ff; border: 1px solid #3a4a6a; font-size: 12px; }
+    .post-card { background: #111e16; border: 1px solid rgba(168,200,180,0.18); border-radius: 8px; padding: 16px; margin-bottom: 12px; color: #e6f0e8; }
+    .post-card p { color: #e6f0e8 !important; font-size: 15px; line-height: 1.6; }
+    section[data-testid="stSidebar"] { background: #0d1410; border-right: 1px solid rgba(168,255,200,0.14); }
+    section[data-testid="stSidebar"] * { color: #e6f0e8; }
+    .stButton>button { background: #143320; color: #e6fff0; font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600; border: 1px solid #2a6b3a; min-height: 40px; }
+    .stButton>button:hover { background: #1a4028; border-color: #3a8a4a; }
+    a { color: #7affa8; text-decoration: underline; }
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 2. SUPABASE CONNECTION
+# 2. BACKEND CONNECTION (SQLite via API)
 # -----------------------------------------------------------------------------
 load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-@st.cache_resource
-def init_supabase() -> Client:
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        st.error("⚠️ SUPABASE_URL atau SUPABASE_KEY belum diatur di file .env")
-        st.stop()
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-supabase = init_supabase()
+BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000/api/v1").rstrip("/")
 
 # COLOR PALETTE
 COLOR_MAP = {
@@ -146,126 +110,78 @@ def fetch_sentiment_data() -> pd.DataFrame:
     """Mengambil dan menggabungkan data hasil analisis dari Instagram, TikTok, & Google Reviews."""
     flattened = []
 
-    # --- 1. FETCH INSTAGRAM ---
+    # --- 1. FETCH INSTAGRAM (via backend SQLite) ---
     try:
-        ig_res = supabase.table("sentiment_analysis_results").select("""
-            id,
-            sentiment,
-            sentiment_score,
-            reasoning,
-            engagement_context,
-            analyzed_at,
-            instagram_posts (
-                id,
-                post_url,
-                owner_username,
-                likes_count,
-                comments_count,
-                post_timestamp
-            ),
-            cleaned_instagram_captions (
-                cleaned_caption,
-                hashtags
-            )
-        """).execute()
-
-        for r in (ig_res.data or []):
-            ig = r.get("instagram_posts") or {}
-            cleaned = r.get("cleaned_instagram_captions") or {}
-            
+        try:
+            j=httpx.get(f"{BACKEND_URL}/sentiment/results?limit=1000", timeout=15).json()
+            d=j.get("data",{})
+            ig_res=d.get("instagram",[]) if isinstance(d,dict) else []
+        except Exception:
+            ig_res=[]
+        for r in (ig_res if isinstance(ig_res, list) else []):
             flattened.append({
-                "id": f"ig_{r['id']}",
+                "id": f"ig_{r.get('post_url','')}",
                 "platform": "Instagram",
                 "sentiment": (r.get("sentiment") or "neutral").lower(),
-                "sentiment_score": r.get("sentiment_score", 0.5),
-                "reasoning": r.get("reasoning", ""),
-                "engagement_context": r.get("engagement_context", ""),
-                "analyzed_at": pd.to_datetime(r.get("analyzed_at")),
-                "post_url": ig.get("post_url", "#"),
-                "username": ig.get("owner_username") or "Unknown",
-                "likes": ig.get("likes_count", 0),
-                "comments": ig.get("comments_count", 0),
+                "sentiment_score": float(r.get("sentiment_score", 50))/100 if r.get("sentiment_score",50)>1 else float(r.get("sentiment_score",0.5)),
+                "reasoning": r.get("reasoning","") or "Tidak ada reasoning",
+                "engagement_context": r.get("engagement_context","") or f"{r.get('likes_count',0)} likes",
+                "analyzed_at": pd.to_datetime(r.get("analyzed_at") or r.get("created_at")),
+                "post_url": r.get("ig_url") or r.get("post_url") or "#",
+                "username": r.get("owner_username") or "Unknown",
+                "likes": r.get("likes_count",0),
+                "comments": r.get("comments_count",0),
                 "views": 0,
                 "rating": None,
-                "total_engagement": ig.get("likes_count", 0) + ig.get("comments_count", 0),
-                "post_timestamp": pd.to_datetime(ig.get("post_timestamp")) if ig.get("post_timestamp") else pd.to_datetime(r.get("analyzed_at")),
-                "caption": cleaned.get("cleaned_caption", ""),
-                "hashtags": cleaned.get("hashtags", [])
+                "total_engagement": (r.get("likes_count",0) or 0)+(r.get("comments_count",0) or 0),
+                "post_timestamp": pd.to_datetime(r.get("post_timestamp")) if r.get("post_timestamp") else pd.to_datetime(r.get("analyzed_at") or r.get("created_at")),
+                "caption": r.get("cleaned_caption","") or "",
+                "hashtags": json.loads(r["hashtags"]) if isinstance(r.get("hashtags"), str) and r.get("hashtags") else (r.get("hashtags") or [])
             })
     except Exception as e:
         st.warning(f"Gagal mengambil data Instagram: {e}")
 
-    # --- 2. FETCH TIKTOK ---
+    # --- 2. FETCH TIKTOK (via backend SQLite) ---
     try:
-        tt_res = supabase.table("tiktok_sentiment_analysis_results").select("""
-            id,
-            sentiment,
-            sentiment_score,
-            reasoning,
-            engagement_context,
-            analyzed_at,
-            tiktok_posts (
-                id,
-                post_url,
-                owner_username,
-                owner_nickname,
-                likes_count,
-                comments_count,
-                shares_count,
-                plays_count,
-                post_timestamp
-            ),
-            cleaned_tiktok_captions (
-                cleaned_caption,
-                hashtags
-            )
-        """).execute()
+        try:
+            if 'd' not in locals():
+                j=httpx.get(f"{BACKEND_URL}/sentiment/results?limit=1000", timeout=15).json()
+                d=j.get("data",{})
+            tt_res=d.get("tiktok",[]) if isinstance(d,dict) else []
+        except Exception:
+            tt_res=[]
+        for r in (tt_res if isinstance(tt_res,list) else []):
 
-        for r in (tt_res.data or []):
-            tt = r.get("tiktok_posts") or {}
-            cleaned = r.get("cleaned_tiktok_captions") or {}
-
-            raw_username = (tt.get("owner_username") or "").strip()
-            if not raw_username:
-                continue
-
-            username = raw_username
-            if username.startswith("@"):
-                username = username[1:]
-
-            likes = tt.get("likes_count", 0)
-            comments = tt.get("comments_count", 0)
-            views = tt.get("plays_count", 0)
-            shares = tt.get("shares_count", 0)
-            post_url = tt.get("post_url") or "#"
-            timestamp = tt.get("post_timestamp")
-
+            raw_username=(r.get("owner_username") or "Unknown").strip().lstrip("@")
             flattened.append({
-                "id": f"tt_{r['id']}",
+                "id": f"tt_{r.get('post_url','')}",
                 "platform": "TikTok",
                 "sentiment": (r.get("sentiment") or "neutral").lower(),
-                "sentiment_score": r.get("sentiment_score", 0.5),
-                "reasoning": r.get("reasoning", ""),
-                "engagement_context": r.get("engagement_context", ""),
-                "analyzed_at": pd.to_datetime(r.get("analyzed_at")),
-                "post_url": post_url,
-                "username": username,
-                "likes": likes,
-                "comments": comments,
-                "views": views,
+                "sentiment_score": float(r.get("sentiment_score",50))/100 if r.get("sentiment_score",50)>1 else float(r.get("sentiment_score",0.5)),
+                "reasoning": r.get("reasoning","") or "Tidak ada reasoning",
+                "engagement_context": r.get("engagement_context","") or "",
+                "analyzed_at": pd.to_datetime(r.get("analyzed_at") or r.get("created_at")),
+                "post_url": r.get("tt_url") or r.get("post_url") or "#",
+                "username": raw_username or "Unknown",
+                "likes": r.get("likes_count",0),
+                "comments": r.get("comments_count",0),
+                "views": 0,
                 "rating": None,
-                "total_engagement": likes + comments + views + shares,
-                "post_timestamp": pd.to_datetime(timestamp) if timestamp else pd.to_datetime(r.get("analyzed_at")),
-                "caption": cleaned.get("cleaned_caption", ""),
-                "hashtags": cleaned.get("hashtags", [])
+                "total_engagement": (r.get("likes_count",0) or 0)+(r.get("comments_count",0) or 0),
+                "post_timestamp": pd.to_datetime(r.get("post_timestamp")) if r.get("post_timestamp") else pd.to_datetime(r.get("analyzed_at") or r.get("created_at")),
+                "caption": r.get("cleaned_caption","") or "",
+                "hashtags": json.loads(r["hashtags"]) if isinstance(r.get("hashtags"),str) and r.get("hashtags") else (r.get("hashtags") or [])
             })
     except Exception as e:
         st.warning(f"Gagal mengambil data TikTok: {e}")
 
-    # --- 3. FETCH GOOGLE REVIEWS ---
+    # --- 3. FETCH GOOGLE REVIEWS (via backend SQLite) ---
     try:
-        gr_res = supabase.table("raw_google_reviews").select("*").execute()
-        for r in (gr_res.data or []):
+        try:
+            gr_res = httpx.get(f"{BACKEND_URL}/search/reviews?limit=100", timeout=10).json().get("data", [])
+        except Exception:
+            gr_res=[]
+        for r in (gr_res if isinstance(gr_res, list) else []):
             rating = r.get("rating")
             # Konversi rating bintang ke sentimen secara otomatis jika diperlukan
             if rating is not None:
@@ -318,11 +234,11 @@ st.sidebar.image("https://unmer.ac.id/wp-content/uploads/2020/07/Branding_Putih-
 user_name = getattr(st.user, "name", "User")
 user_email = getattr(st.user, "email", "")
 
-st.sidebar.markdown(f"👤 **{user_name}**")
+st.sidebar.markdown(f":material/person: **{user_name}**")
 if user_email:
     st.sidebar.caption(user_email)
 
-if st.sidebar.button("🚪 Logout", use_container_width=True):
+if st.sidebar.button(":material/logout: Logout", use_container_width=True):
     st.logout()
 
 st.sidebar.title("UNMER Monitor")
@@ -330,7 +246,7 @@ st.sidebar.caption("Analisis Sentimen & Public Perception")
 st.sidebar.markdown("---")
 
 # Pipeline Control Expander (Versi Debugging)
-with st.sidebar.expander("⚙️ Pipeline Control", expanded=False):
+with st.sidebar.expander(":material/settings: Pipeline Control", expanded=False):
     st.caption("Jalankan seluruh proses crawling & analisis data dari awal secara otomatis.")
     
     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1").rstrip("/")
@@ -348,17 +264,17 @@ with st.sidebar.expander("⚙️ Pipeline Control", expanded=False):
         {"name": "8. Sentiment Analysis Tiktok", "endpoint": "/sentiment/tiktok"},        
     ]
 
-    if st.button("🚀 Jalankan Pipeline", type="primary", use_container_width=True):
-        with st.status("🚀 Memproses...", expanded=True) as status:
+    if st.button(":material/rocket_launch: Jalankan Pipeline", type="primary", use_container_width=True):
+        with st.status(":material/rocket_launch: Memproses...", expanded=True) as status:
             failed = False
             for step in PIPELINE_STEPS:
                 url = f"{BACKEND_URL}{step['endpoint']}"
-                st.write(f"🔄 **{step['name']}**...")
+                st.write(f":material/sync: **{step['name']}**...")
                 try:
                     res = requests.post(url, timeout=300)
                     
                     if res.status_code in [200, 201]:
-                        st.write(f"✅ **{step['name']}** Selesai!")
+                        st.write(f":material/check_circle: **{step['name']}** Selesai!")
                     else:
                         # Mengambil detail pesan error dari respons JSON backend
                         try:
@@ -366,29 +282,29 @@ with st.sidebar.expander("⚙️ Pipeline Control", expanded=False):
                         except Exception:
                             err_detail = res.text
                             
-                        st.error(f"❌ **{step['name']}** Gagal (HTTP {res.status_code}): {err_detail}")
+                        st.error(f":material/error: **{step['name']}** Gagal (HTTP {res.status_code}): {err_detail}")
                         failed = True
                         break
                         
                 except requests.exceptions.Timeout:
-                    st.error(f"❌ **{step['name']}** Waktu habis (Timeout > 5 menit)")
+                    st.error(f":material/error: **{step['name']}** Waktu habis (Timeout > 5 menit)")
                     failed = True
                     break
                 except Exception as e:
-                    st.error(f"❌ Connection Error: {e}")
+                    st.error(f":material/error: Connection Error: {e}")
                     failed = True
                     break
             
             if not failed:
-                status.update(label="🎉 Selesai!", state="complete", expanded=False)
+                status.update(label=":material/celebration: Selesai!", state="complete", expanded=False)
                 st.success("Data berhasil diperbarui!")
                 st.cache_data.clear()
                 st.rerun()
             else:
-                status.update(label="⚠️ Terhenti Karena Error", state="error", expanded=True)
+                status.update(label=":material/warning: Terhenti Karena Error", state="error", expanded=True)
 
 # # Pipeline Control Expander
-# with st.sidebar.expander("⚙️ Pipeline Control", expanded=False):
+# with st.sidebar.expander(":material/settings: Pipeline Control", expanded=False):
 #     st.caption("Jalankan seluruh proses crawling & analisis data dari awal secara otomatis.")
     
 #     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1").rstrip("/")
@@ -406,61 +322,61 @@ with st.sidebar.expander("⚙️ Pipeline Control", expanded=False):
 #         {"name": "8. Sentiment Analysis Tiktok", "endpoint": "/sentiment/tiktok"},        
 #     ]
 
-#     if st.button("🚀 Jalankan Pipeline", type="primary", use_container_width=True):
-#         with st.status("🚀 Memproses...", expanded=True) as status:
+#     if st.button(":material/rocket_launch: Jalankan Pipeline", type="primary", use_container_width=True):
+#         with st.status(":material/rocket_launch: Memproses...", expanded=True) as status:
 #             failed = False
 #             for step in PIPELINE_STEPS:
 #                 url = f"{BACKEND_URL}{step['endpoint']}"
-#                 st.write(f"🔄 **{step['name']}**...")
+#                 st.write(f":material/sync: **{step['name']}**...")
 #                 try:
 #                     res = requests.post(url, timeout=300)
 #                     if res.status_code in [200, 201]:
-#                         st.write(f"✅ **{step['name']}** Selesai!")
+#                         st.write(f":material/check_circle: **{step['name']}** Selesai!")
 #                     else:
-#                         st.error(f"❌ **{step['name']}** Gagal ({res.status_code})")
+#                         st.error(f":material/error: **{step['name']}** Gagal ({res.status_code})")
 #                         failed = True
 #                         break
 #                 except Exception as e:
-#                     st.error(f"❌ Connection Error: {e}")
+#                     st.error(f":material/error: Connection Error: {e}")
 #                     failed = True
 #                     break
             
 #             if not failed:
-#                 status.update(label="🎉 Selesai!", state="complete", expanded=False)
+#                 status.update(label=":material/celebration: Selesai!", state="complete", expanded=False)
 #                 st.success("Data berhasil diperbarui!")
 #                 st.cache_data.clear()
 #                 st.rerun()
 #             else:
-#                 status.update(label="⚠️ Terhenti Karena Error", state="error", expanded=True)
+#                 status.update(label=":material/warning: Terhenti Karena Error", state="error", expanded=True)
 
 # st.sidebar.markdown("---")
 
 # Filter Platform
 platform_filter = st.sidebar.multiselect(
-    "📱 Platform",
+    ":material/smartphone: Platform",
     options=["Instagram", "TikTok", "Google Review"],
     default=["Instagram", "TikTok", "Google Review"]
 )
 
 # Date Range Filter
 date_filter_option = st.sidebar.selectbox(
-    "📅 Rentang Waktu",
+    ":material/calendar_today: Rentang Waktu",
     ["Last 24 Hours", "Last 3 Days", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
     index=2
 )
 
 # Filter Sentiment Multi-select
 sentiment_filter = st.sidebar.multiselect(
-    "🏷️ Filter Sentimen",
+    ":material/label: Filter Sentimen",
     options=["positive", "neutral", "negative"],
     default=["positive", "neutral", "negative"]
 )
 
 # Search Box Keyword
-search_query = st.sidebar.text_input("🔍 Cari Kata Kunci Caption / Ulasan", "")
+search_query = st.sidebar.text_input(":material/search: Cari Kata Kunci Caption / Ulasan", "")
 
 # Refresh Button
-if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+if st.sidebar.button(":material/sync: Refresh Data", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
@@ -468,7 +384,7 @@ if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
 # 5. FILTERING LOGIC
 # -----------------------------------------------------------------------------
 if df_raw.empty:
-    st.warning("⚠️ Belum ada data analisis atau ulasan di database. Jalankan pipeline atau fetch data terlebih dahulu.")
+    st.warning(":material/warning: Belum ada data analisis atau ulasan di database. Jalankan pipeline atau fetch data terlebih dahulu.")
     st.stop()
 
 df_filtered = df_raw.copy()
@@ -477,23 +393,22 @@ df_filtered = df_raw.copy()
 if platform_filter:
     df_filtered = df_filtered[df_filtered["platform"].isin(platform_filter)]
 
-# Date Filtering Logic
-now = datetime.now(timezone.utc)
+# Date Filtering Logic (WCAG: pd.Timestamp to avoid dtype mismatch)
+now = pd.Timestamp.now(tz="UTC")
+cutoff = None
 if date_filter_option == "Last 24 Hours":
-    cutoff = now - timedelta(hours=24)
-    df_filtered = df_filtered[df_filtered["post_timestamp"] >= cutoff]
+    cutoff = now - pd.Timedelta(hours=24)
 elif date_filter_option == "Last 3 Days":
-    cutoff = now - timedelta(days=3)
-    df_filtered = df_filtered[df_filtered["post_timestamp"] >= cutoff]
+    cutoff = now - pd.Timedelta(days=3)
 elif date_filter_option == "Last 7 Days":
-    cutoff = now - timedelta(days=7)
-    df_filtered = df_filtered[df_filtered["post_timestamp"] >= cutoff]
+    cutoff = now - pd.Timedelta(days=7)
 elif date_filter_option == "Last 30 Days":
-    cutoff = now - timedelta(days=30)
-    df_filtered = df_filtered[df_filtered["post_timestamp"] >= cutoff]
+    cutoff = now - pd.Timedelta(days=30)
 elif date_filter_option == "Last 90 Days":
-    cutoff = now - timedelta(days=90)
-    df_filtered = df_filtered[df_filtered["post_timestamp"] >= cutoff]
+    cutoff = now - pd.Timedelta(days=90)
+if cutoff is not None:
+    ts = pd.to_datetime(df_filtered["post_timestamp"], utc=True, errors="coerce")
+    df_filtered = df_filtered[ts >= cutoff]
 
 # Sentiment Filter Logic
 if sentiment_filter:
@@ -506,7 +421,7 @@ if search_query:
 # -----------------------------------------------------------------------------
 # 6. HEADER & KPI CARDS
 # -----------------------------------------------------------------------------
-st.title("📊 Cross-Platform Sentiment & Review Dashboard")
+st.title(":material/analytics: Cross-Platform Sentiment & Review Dashboard")
 
 if not df_raw.empty and "analyzed_at" in df_raw.columns:
     last_updated_dt = df_raw["analyzed_at"].max()
@@ -580,7 +495,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 chart_col1, chart_col2 = st.columns([1, 2])
 
 with chart_col1:
-    st.subheader("🍩 Distribusi Sentimen")
+    st.subheader(":material/donut_large: Distribusi Sentimen")
     if not df_filtered.empty:
         sentiment_counts = df_filtered["sentiment"].value_counts().reset_index()
         sentiment_counts.columns = ["sentiment", "count"]
@@ -600,7 +515,7 @@ with chart_col1:
         st.info("Tidak ada data untuk grafik.")
 
 with chart_col2:
-    st.subheader("📈 Tren Sentimen dari Waktu ke Waktu")
+    st.subheader(":material/show_chart: Tren Sentimen dari Waktu ke Waktu")
     if not df_filtered.empty:
         df_trend = df_filtered.copy()
         df_trend["date"] = df_trend["post_timestamp"].dt.date
@@ -637,7 +552,7 @@ with chart_col2:
 comp_col1, comp_col2 = st.columns(2)
 
 with comp_col1:
-    st.subheader("📱 Perbandingan Sentimen per Platform")
+    st.subheader(":material/smartphone: Perbandingan Sentimen per Platform")
     if not df_filtered.empty:
         platform_sentiment = df_filtered.groupby(["platform", "sentiment"]).size().reset_index(name="count")
         fig_plat = px.bar(
@@ -654,7 +569,7 @@ with comp_col1:
         st.plotly_chart(fig_plat, use_container_width=True)
 
 with comp_col2:
-    st.subheader("🔥 Rata-rata Interaksi Sosmed")
+    st.subheader(":material/local_fire_department: Rata-rata Interaksi Sosmed")
     if not df_filtered.empty:
         df_sosmed = df_filtered[df_filtered["platform"].isin(["Instagram", "TikTok"])]
         if not df_sosmed.empty:
@@ -677,7 +592,7 @@ with comp_col2:
 # 8. POST FEED & DETAILED TABLE TABS (TERMASUK GOOGLE REVIEW)
 # -----------------------------------------------------------------------------
 st.markdown("---")
-tab_feed, tab_reviews, tab_table = st.tabs(["📱 Feed Postingan", "⭐ Google Reviews", "📋 Tabel Data Lengkap"])
+tab_feed, tab_reviews, tab_table = st.tabs([":material/smartphone: Feed Postingan", ":material/star: Google Reviews", ":material/table_view: Tabel Data Lengkap"])
 
 with tab_feed:
     st.subheader("Feed Postingan Media Sosial (Instagram & TikTok)")
@@ -703,15 +618,17 @@ with tab_feed:
         for _, row in df_page.iterrows():
             sentiment_class = f"badge-{row['sentiment']}"
             platform_badge = f"badge-{row['platform'].lower()}"
-            views_html = f"&nbsp;•&nbsp; ▶️ {row['views']:,} Views" if row['views'] > 0 else ""
+            views_val = row['views'] if pd.notnull(row['views']) else 0
+            try: views_html = f"&nbsp;•&nbsp; :material/play_circle: {int(float(views_val)):,} Views" if views_val and float(views_val) > 0 else ""
+            except: views_html=""
 
             st.markdown(f"""
             <div class="post-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <div>
                         <span class="{platform_badge}">{row['platform']}</span>
-                        <strong style="color:#334155; margin-left:6px;">@{row['username']}</strong>
-                        <span style="color:#94a3b8; font-size:12px; margin-left:8px;">
+                        <strong style="color:#e6f0e8; margin-left:6px;">@{row['username']}</strong>
+                        <span style="color:#a8c0b0; font-size:12px; margin-left:8px;">
                             {row['post_timestamp'].strftime('%d %b %Y, %H:%M WIB') if pd.notnull(row['post_timestamp']) else ''}
                         </span>
                     </div>
@@ -725,17 +642,17 @@ with tab_feed:
                         + ("..." if len(row.get("caption") or "") > 280 else "")
                     }
                 </p>
-                <div style="background-color:#f1f5f9; padding:8px 12px; border-radius:6px; font-size:12px; color:#475569; margin-bottom:10px;">
-                    💡 <strong>Reasoning AI:</strong> {row['reasoning']}<br>
-                    📊 <strong>Konteks Engagement:</strong> {row['engagement_context']}
+                <div style="background-color:#1a2e22; padding:10px 12px; border-radius:6px; font-size:14px; color:#d0e8d8; margin-bottom:10px; border:1px solid rgba(168,255,200,0.12);">
+                    <span class="ms">lightbulb</span> <strong>Reasoning AI:</strong> {row['reasoning']}<br>
+                    <span class="ms">analytics</span> <strong>Konteks Engagement:</strong> {row['engagement_context']}
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#64748b;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#a8c0b0;">
                     <div>
-                        ❤️ {row['likes']:,} Likes &nbsp;•&nbsp; 💬 {row['comments']:,} Comments {views_html}
+                        <span class="ms">favorite</span> {int(row['likes'] if pd.notnull(row['likes']) else 0):,} Likes &nbsp;•&nbsp; <span class="ms">chat_bubble</span> {int(row['comments'] if pd.notnull(row['comments']) else 0):,} Comments {views_html}
                     </div>
                     <div>
-                        <a href="{row['post_url']}" target="_blank" style="color:#2563eb; text-decoration:none; font-weight:500;">
-                            Buka di {row['platform']} ↗
+                        <a href="{row['post_url']}" target="_blank" style="color:#7affa8; text-decoration:none; font-weight:500;">
+                            Buka di {row['platform']} <span class="ms">open_in_new</span>
                         </a>
                     </div>
                 </div>
@@ -745,7 +662,7 @@ with tab_feed:
         st.markdown("---")
         col_prev, col_info, col_next = st.columns([1, 2, 1])
         with col_prev:
-            if st.button("⬅️ Sebelumnya (Sosmed)", disabled=(st.session_state.social_page == 1), use_container_width=True):
+            if st.button(":material/arrow_back: Sebelumnya (Sosmed)", disabled=(st.session_state.social_page == 1), use_container_width=True):
                 st.session_state.social_page -= 1
                 st.rerun()
         with col_info:
@@ -757,12 +674,12 @@ with tab_feed:
                 unsafe_allow_html=True
             )
         with col_next:
-            if st.button("Selanjutnya ➡️ (Sosmed)", disabled=(st.session_state.social_page == total_pages), use_container_width=True):
+            if st.button("Selanjutnya :material/arrow_forward: (Sosmed)", disabled=(st.session_state.social_page == total_pages), use_container_width=True):
                 st.session_state.social_page += 1
                 st.rerun()
 
 with tab_reviews:
-    st.subheader("⭐ Ulasan Google Maps (Google Reviews)")
+    st.subheader(":material/star: Ulasan Google Maps (Google Reviews)")
     df_reviews_feed = df_filtered[df_filtered["platform"] == "Google Review"]
 
     if df_reviews_feed.empty:
@@ -784,15 +701,15 @@ with tab_reviews:
 
         for _, row in df_page_rev.iterrows():
             sentiment_class = f"badge-{row['sentiment']}"
-            rating_stars = "⭐" * int(row['rating']) if pd.notnull(row['rating']) else "⭐ (N/A)"
+            rating_stars = '<span class="ms">star</span>' * int(row['rating']) if pd.notnull(row['rating']) else '<span class="ms">star</span> (N/A)'
 
             st.markdown(f"""
             <div class="post-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <div>
                         <span class="badge-google-review">Google Review</span>
-                        <strong style="color:#334155; margin-left:6px;">{row['username']}</strong>
-                        <span style="color:#94a3b8; font-size:12px; margin-left:8px;">
+                        <strong style="color:#e6f0e8; margin-left:6px;">{row['username']}</strong>
+                        <span style="color:#a8c0b0; font-size:12px; margin-left:8px;">
                             {row['post_timestamp'].strftime('%d %b %Y, %H:%M WIB') if pd.notnull(row['post_timestamp']) else ''}
                         </span>
                     </div>
@@ -800,14 +717,14 @@ with tab_reviews:
                         <span class="{sentiment_class}">{row['sentiment'].upper()}</span>
                     </div>
                 </div>
-                <div style="font-size:16px; margin-bottom:8px;">
-                    {rating_stars} <span style="font-size:14px; font-weight:600; color:#475569;">({row['rating']}/5)</span>
+                <div style="font-size:16px; margin-bottom:8px; color:#ffd600;">
+                    {rating_stars} <span style="font-size:14px; font-weight:600; color:#a8c0b0;">({row['rating']}/5)</span>
                 </div>
-                <p style="color:#334155; font-size:14px; line-height:1.5; margin-bottom:10px;">
+                <p style="color:#e6f0e8; font-size:15px; line-height:1.6; margin-bottom:10px;">
                     {row.get("caption") or "Tidak ada teks ulasan."}
                 </p>
-                <div style="background-color:#f1f5f9; padding:8px 12px; border-radius:6px; font-size:12px; color:#475569; margin-bottom:10px;">
-                    💡 <strong>Analisis / Catatan:</strong> {row['reasoning']}
+                <div style="background-color:#1a2e22; padding:10px 12px; border-radius:6px; font-size:14px; color:#d0e8d8; margin-bottom:10px; border:1px solid rgba(168,255,200,0.12);">
+                    <span class="ms">lightbulb</span> <strong>Analisis / Catatan:</strong> {row['reasoning']}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -815,7 +732,7 @@ with tab_reviews:
         st.markdown("---")
         col_prev_r, col_info_r, col_next_r = st.columns([1, 2, 1])
         with col_prev_r:
-            if st.button("⬅️ Sebelumnya (Reviews)", disabled=(st.session_state.review_page == 1), use_container_width=True):
+            if st.button(":material/arrow_back: Sebelumnya (Reviews)", disabled=(st.session_state.review_page == 1), use_container_width=True):
                 st.session_state.review_page -= 1
                 st.rerun()
         with col_info_r:
@@ -827,7 +744,7 @@ with tab_reviews:
                 unsafe_allow_html=True
             )
         with col_next_r:
-            if st.button("Selanjutnya ➡️ (Reviews)", disabled=(st.session_state.review_page == total_rev_pages), use_container_width=True):
+            if st.button("Selanjutnya :material/arrow_forward: (Reviews)", disabled=(st.session_state.review_page == total_rev_pages), use_container_width=True):
                 st.session_state.review_page += 1
                 st.rerun()
 
@@ -853,7 +770,7 @@ with tab_table:
 
         csv_data = table_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Download Data CSV",
+            label=":material/download: Download Data CSV",
             data=csv_data,
             file_name=f"unmer_full_sentiment_reviews_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
