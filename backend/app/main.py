@@ -1,11 +1,17 @@
+from pathlib import Path
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
-from app.routers import search, score, crawl, clean, sentiment
+from app.routers import search, score, crawl, clean, sentiment, dashboard
 
 from app.core.db import init_db
 init_db()
 
 app = FastAPI(title=settings.PROJECT_NAME)
+
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/health/db")
 def health_db():
@@ -17,12 +23,12 @@ def health_db():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# Include UI / Dashboard Router (HTMX & Alpine.js)
+app.include_router(dashboard.router)
+
+# Include API v1 Routers
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(score.router, prefix="/api/v1")
-app.include_router(crawl.router, prefix="/api/v1")  # Modul Crawler Baru
+app.include_router(crawl.router, prefix="/api/v1")
 app.include_router(clean.router, prefix="/api/v1")
-app.include_router(sentiment.router, prefix="/api/v1")  # Register router sentimen
-
-@app.get("/")
-def read_root():
-    return {"message": "UNMER Monitor API is running"}
+app.include_router(sentiment.router, prefix="/api/v1")

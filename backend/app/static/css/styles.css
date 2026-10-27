@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+    --bg-dark: #0a0f14;
+    --sidebar-bg: #0d1410;
+    --card-bg: #111e16;
+    --card-border: rgba(168, 255, 200, 0.22);
+    --card-border-light: rgba(168, 200, 180, 0.18);
+    --text-primary: #e6f0e8;
+    --text-muted: #a8c0b0;
+    --accent-green: #7affa8;
+    --accent-green-bright: #b8ffcc;
+    --positive-color: #10b981;
+    --neutral-color: #f59e0b;
+    --negative-color: #ef4444;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+/* Prevent long words/URLs breaking layout */
+p, h1, h2, h3, td, .reasoning-box {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+h1, h2, h3, .font-tech {
+    font-family: 'Share Tech Mono', monospace;
+}
+
+h1 {
+    color: var(--accent-green-bright);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.sidebar {
+    background-color: var(--sidebar-bg);
+    border-right: 1px solid rgba(168, 255, 200, 0.14);
+}
+
+.metric-card {
+    background: var(--card-bg);
+    padding: 16px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    text-align: center;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .metric-card {
+        padding: 12px 8px;
+    }
+    .metric-value {
+        font-size: 22px;
+    }
+}
+
+.metric-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 28px;
+    color: var(--accent-green);
+    font-weight: bold;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.post-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border-light);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.badge-positive {
+    background: #0d2a18;
+    color: #e6fff0;
+    border: 1px solid #1a6b3a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-neutral {
+    background: #2a260d;
+    color: #fff8cc;
+    border: 1px solid #8a7a1a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-negative {
+    background: #2a1218;
+    color: #ffe6eb;
+    border: 1px solid #8a2a3a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-instagram {
+    background: #0d1e2a;
+    color: #d0eaff;
+    border: 1px solid #2a5a7a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.badge-tiktok {
+    background: #0d1e16;
+    color: #d0ffe8;
+    border: 1px solid #2a6b4a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.badge-google-review {
+    background: #1a1e2a;
+    color: #e0e8ff;
+    border: 1px solid #3a4a6a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.reasoning-box {
+    background-color: #1a2e22;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #d0e8d8;
+    margin: 10px 0;
+    border: 1px solid rgba(168, 255, 200, 0.12);
+}
+
+.btn-custom {
+    background: #143320;
+    color: #e6fff0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid #2a6b3a;
+    border-radius: 6px;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+}
+
+.btn-custom:hover {
+    background: #1a4028;
+    border-color: #3a8a4a;
+    color: #ffffff;
+}
+
+.custom-input {
+    background: #0d1410;
+    border: 1px solid rgba(168, 255, 200, 0.2);
+    color: #e6f0e8;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 14px;
+}
+
+.custom-input:focus {
+    outline: none;
+    border-color: var(--accent-green);
+    box-shadow: 0 0 0 2px rgba(122, 255, 168, 0.2);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0a0f14;
+}
+::-webkit-scrollbar-thumb {
+    background: #1b3324;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #2a523a;
+}

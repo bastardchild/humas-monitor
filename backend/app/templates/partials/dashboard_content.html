@@ -1,0 +1,314 @@
+<!-- HEADER -->
+<div class="mb-6">
+    <h1 class="text-xl sm:text-2xl font-bold font-tech flex flex-wrap items-center gap-2">
+        <span class="material-symbols-outlined text-2xl sm:text-3xl">analytics</span>
+        Cross-Platform Sentiment & Review Dashboard
+    </h1>
+    <p class="text-xs text-[#a8c0b0] mt-1">
+        Menampilkan <strong>{{ total_posts }}</strong> data gabungan (Instagram, TikTok, & Google Review) berdasarkan filter aktif. 
+        Terakhir diperbarui: <strong>{{ last_updated_str }}</strong>
+    </p>
+</div>
+
+<!-- KPI CARDS -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="metric-card">
+        <div class="metric-label">Total Data / Post</div>
+        <div class="metric-value">{{ "{:,}".format(total_posts) }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Sentimen Positif</div>
+        <div class="metric-value text-[#10b981]">{{ "{:.1f}".format(pos_ratio) }}%</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Total Likes</div>
+        <div class="metric-value">{{ "{:,}".format(total_likes) }}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Total Komentar</div>
+        <div class="metric-value">{{ "{:,}".format(total_comments) }}</div>
+    </div>
+</div>
+
+<!-- CHARTS SECTION -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
+    <!-- Doughnut Chart -->
+    <div class="bg-[#111e16] p-4 rounded-xl border border-emerald-900/40 flex flex-col min-w-0">
+        <h3 class="text-sm font-semibold font-tech text-[#d0ffe0] mb-3 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-lg">donut_large</span> Distribusi Sentimen
+        </h3>
+        <div class="h-64 relative flex-1">
+            <canvas id="sentimentPieChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Line Chart (Tren) -->
+    <div class="lg:col-span-2 bg-[#111e16] p-4 rounded-xl border border-emerald-900/40 flex flex-col min-w-0">
+        <h3 class="text-sm font-semibold font-tech text-[#d0ffe0] mb-3 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-lg">show_chart</span> Tren Sentimen dari Waktu ke Waktu
+        </h3>
+        <div class="h-64 relative flex-1">
+            <canvas id="trendLineChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-8">
+    <!-- Platform Comparison -->
+    <div class="bg-[#111e16] p-4 rounded-xl border border-emerald-900/40 flex flex-col min-w-0">
+        <h3 class="text-sm font-semibold font-tech text-[#d0ffe0] mb-3 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-lg">smartphone</span> Perbandingan Sentimen per Platform
+        </h3>
+        <div class="h-60 relative flex-1">
+            <canvas id="platformBarChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Sosmed Engagement -->
+    <div class="bg-[#111e16] p-4 rounded-xl border border-emerald-900/40 flex flex-col min-w-0">
+        <h3 class="text-sm font-semibold font-tech text-[#d0ffe0] mb-3 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-lg">local_fire_department</span> Rata-rata Interaksi Sosmed
+        </h3>
+        <div class="h-60 relative flex-1">
+            <canvas id="engBarChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- TABS & FEED SECTION -->
+<div class="border-t border-emerald-900/40 pt-6">
+    <!-- Tab Controls -->
+    <div class="flex border-b border-emerald-900/40 mb-6 gap-1 sm:gap-2 overflow-x-auto">
+        <button 
+            @click="activeTab = 'social'" 
+            :class="activeTab === 'social' ? 'border-emerald-400 text-[#b8ffcc] bg-emerald-950/40' : 'border-transparent text-[#a8c0b0] hover:text-[#e6f0e8]'"
+            class="py-2.5 px-3 sm:px-4 text-xs font-semibold border-b-2 rounded-t-lg transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0"
+        >
+            <span class="material-symbols-outlined text-base">smartphone</span>
+            Feed Postingan ({{ social_posts|length }})
+        </button>
+        <button 
+            @click="activeTab = 'reviews'" 
+            :class="activeTab === 'reviews' ? 'border-emerald-400 text-[#b8ffcc] bg-emerald-950/40' : 'border-transparent text-[#a8c0b0] hover:text-[#e6f0e8]'"
+            class="py-2.5 px-3 sm:px-4 text-xs font-semibold border-b-2 rounded-t-lg transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0"
+        >
+            <span class="material-symbols-outlined text-base">star</span>
+            Google Reviews ({{ review_posts|length }})
+        </button>
+        <button 
+            @click="activeTab = 'table'" 
+            :class="activeTab === 'table' ? 'border-emerald-400 text-[#b8ffcc] bg-emerald-950/40' : 'border-transparent text-[#a8c0b0] hover:text-[#e6f0e8]'"
+            class="py-2.5 px-3 sm:px-4 text-xs font-semibold border-b-2 rounded-t-lg transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0"
+        >
+            <span class="material-symbols-outlined text-base">table_view</span>
+            Tabel Data Lengkap
+        </button>
+    </div>
+
+    <!-- TAB 1: SOSMED FEED -->
+    <div x-show="activeTab === 'social'" x-transition>
+        <h3 class="text-base font-semibold text-[#d0ffe0] mb-4">Feed Postingan Media Sosial (Instagram & TikTok)</h3>
+        {% if not social_page_items %}
+            <div class="p-6 text-center text-xs text-[#a8c0b0] bg-[#111e16] rounded-lg border border-emerald-900/40">
+                Tidak ada postingan media sosial yang sesuai kriteria filter.
+            </div>
+        {% else %}
+            <div class="space-y-4">
+                {% for item in social_page_items %}
+                <div class="post-card">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="badge-{{ item.platform.lower() }}">{{ item.platform }}</span>
+                            <strong class="text-sm text-[#e6f0e8]">@{{ item.username }}</strong>
+                            <span class="text-xs text-[#a8c0b0]">{{ item.post_timestamp_str }}</span>
+                        </div>
+                        <div>
+                            <span class="badge-{{ item.sentiment }}">
+                                {{ item.sentiment.upper() }} ({{ "{:.2f}".format(item.sentiment_score) }})
+                            </span>
+                        </div>
+                    </div>
+
+                    <p class="text-sm text-[#e6f0e8] mb-3 leading-relaxed break-words">
+                        {{ item.caption[:280] }}{% if item.caption|length > 280 %}...{% endif %}
+                    </p>
+
+                    <div class="reasoning-box">
+                        <div><span class="material-symbols-outlined text-xs align-middle">lightbulb</span> <strong>Reasoning AI:</strong> {{ item.reasoning }}</div>
+                        {% if item.engagement_context %}
+                        <div class="mt-1"><span class="material-symbols-outlined text-xs align-middle">analytics</span> <strong>Konteks Engagement:</strong> {{ item.engagement_context }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-[#a8c0b0] pt-1">
+                        <div class="flex items-center gap-3">
+                            <span><span class="material-symbols-outlined text-xs align-middle">favorite</span> {{ "{:,}".format(item.likes) }} Likes</span>
+                            <span><span class="material-symbols-outlined text-xs align-middle">chat_bubble</span> {{ "{:,}".format(item.comments) }} Comments</span>
+                        </div>
+                        {% if item.post_url and item.post_url != '#' %}
+                        <a href="{{ item.post_url }}" target="_blank" class="text-[#7affa8] hover:underline flex items-center gap-1 font-medium">
+                            Buka di {{ item.platform }} <span class="material-symbols-outlined text-xs">open_in_new</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Social Feed Pagination -->
+            {% if social_total_pages > 1 %}
+            <div class="flex flex-wrap items-center justify-between gap-2 mt-6 pt-4 border-t border-emerald-900/40 text-xs">
+                <button 
+                    {% if social_page > 1 %}
+                        hx-get="/partials/dashboard-content?social_page={{ social_page - 1 }}" 
+                        hx-include="#filter-form" 
+                        hx-target="#dashboard-content"
+                    {% else %}
+                        disabled
+                    {% endif %}
+                    class="btn-custom py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                    <span class="material-symbols-outlined text-sm">arrow_back</span> Sebelumnya
+                </button>
+                <span class="text-[#a8c0b0]">Halaman <strong>{{ social_page }}</strong> dari <strong>{{ social_total_pages }}</strong> (Total <strong>{{ social_posts|length }}</strong> postingan)</span>
+                <button 
+                    {% if social_page < social_total_pages %}
+                        hx-get="/partials/dashboard-content?social_page={{ social_page + 1 }}" 
+                        hx-include="#filter-form" 
+                        hx-target="#dashboard-content"
+                    {% else %}
+                        disabled
+                    {% endif %}
+                    class="btn-custom py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                    Selanjutnya <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </button>
+            </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- TAB 2: GOOGLE REVIEWS FEED -->
+    <div x-show="activeTab === 'reviews'" x-transition>
+        <h3 class="text-base font-semibold text-[#d0ffe0] mb-4 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-xl text-yellow-400">star</span> Ulasan Google Maps (Google Reviews)
+        </h3>
+        {% if not review_page_items %}
+            <div class="p-6 text-center text-xs text-[#a8c0b0] bg-[#111e16] rounded-lg border border-emerald-900/40">
+                Tidak ada ulasan Google Maps yang sesuai kriteria filter.
+            </div>
+        {% else %}
+            <div class="space-y-4">
+                {% for item in review_page_items %}
+                <div class="post-card">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="badge-google-review">Google Review</span>
+                            <strong class="text-sm text-[#e6f0e8]">{{ item.username }}</strong>
+                            <span class="text-xs text-[#a8c0b0]">{{ item.post_timestamp_str }}</span>
+                        </div>
+                        <div>
+                            <span class="badge-{{ item.sentiment }}">{{ item.sentiment.upper() }}</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1 text-yellow-400 text-sm mb-2">
+                        {% for n in range(item.rating or 0) %}
+                            <span class="material-symbols-outlined text-base">star</span>
+                        {% endfor %}
+                        <span class="text-xs text-[#a8c0b0] ml-1">({{ item.rating }}/5)</span>
+                    </div>
+
+                    <p class="text-sm text-[#e6f0e8] mb-3 leading-relaxed break-words">
+                        {{ item.caption or "Tidak ada teks ulasan." }}
+                    </p>
+
+                    <div class="reasoning-box">
+                        <span class="material-symbols-outlined text-xs align-middle">lightbulb</span> <strong>Analisis / Catatan:</strong> {{ item.reasoning }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Review Pagination -->
+            {% if review_total_pages > 1 %}
+            <div class="flex flex-wrap items-center justify-between gap-2 mt-6 pt-4 border-t border-emerald-900/40 text-xs">
+                <button 
+                    {% if review_page > 1 %}
+                        hx-get="/partials/dashboard-content?review_page={{ review_page - 1 }}" 
+                        hx-include="#filter-form" 
+                        hx-target="#dashboard-content"
+                    {% else %}
+                        disabled
+                    {% endif %}
+                    class="btn-custom py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                    <span class="material-symbols-outlined text-sm">arrow_back</span> Sebelumnya
+                </button>
+                <span class="text-[#a8c0b0]">Halaman <strong>{{ review_page }}</strong> dari <strong>{{ review_total_pages }}</strong> (Total <strong>{{ review_posts|length }}</strong> ulasan)</span>
+                <button 
+                    {% if review_page < review_total_pages %}
+                        hx-get="/partials/dashboard-content?review_page={{ review_page + 1 }}" 
+                        hx-include="#filter-form" 
+                        hx-target="#dashboard-content"
+                    {% else %}
+                        disabled
+                    {% endif %}
+                    class="btn-custom py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                    Selanjutnya <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </button>
+            </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- TAB 3: DATA TABLE -->
+    <div x-show="activeTab === 'table'" x-transition>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 class="text-base font-semibold text-[#d0ffe0]">Data Keseluruhan (Exportable)</h3>
+            <a href="/export/csv" download class="btn-custom py-1.5 px-3 text-xs flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">download</span> Download Data CSV
+            </a>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-emerald-900/40 bg-[#111e16]">
+            <table class="w-full min-w-[760px] text-left text-xs text-[#e6f0e8]">
+                <thead class="bg-[#0d1410] border-b border-emerald-900/60 font-tech text-[#b8ffcc] uppercase">
+                    <tr>
+                        <th class="p-3">Platform</th>
+                        <th class="p-3">User/Author</th>
+                        <th class="p-3">Sentimen</th>
+                        <th class="p-3">Score</th>
+                        <th class="p-3">Rating</th>
+                        <th class="p-3">Likes</th>
+                        <th class="p-3">Comments</th>
+                        <th class="p-3">Caption / Content</th>
+                        <th class="p-3">Waktu Data</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-emerald-950/60">
+                    {% for item in all_items[:100] %}
+                    <tr class="hover:bg-emerald-950/30">
+                        <td class="p-3 font-semibold"><span class="badge-{{ item.platform.lower().replace(' ', '-') }}">{{ item.platform }}</span></td>
+                        <td class="p-3 font-medium">@{{ item.username }}</td>
+                        <td class="p-3"><span class="badge-{{ item.sentiment }}">{{ item.sentiment.upper() }}</span></td>
+                        <td class="p-3">{{ "{:.2f}".format(item.sentiment_score) }}</td>
+                        <td class="p-3">{{ item.rating if item.rating else '-' }}</td>
+                        <td class="p-3">{{ item.likes }}</td>
+                        <td class="p-3">{{ item.comments }}</td>
+                        <td class="p-3 max-w-xs truncate" title="{{ item.caption }}">{{ item.caption }}</td>
+                        <td class="p-3 text-[#a8c0b0] whitespace-nowrap">{{ item.post_timestamp_str }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-[#a8c0b0] mt-2">* Menampilkan 100 baris pertama untuk performa tabel preview. Gunakan tombol Download CSV untuk data lengkap.</p>
+    </div>
+</div>
+
+<!-- DATA JSON UNTUK CHART.JS -->
+<script id="chart-data-json" type="application/json">
+{{ chart_json|safe }}
+</script>

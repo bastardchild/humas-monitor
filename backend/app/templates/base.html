@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNMER Monitor - Cross-Platform Sentiment Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300,0,0" rel="stylesheet" />
+    <!-- Custom Theme CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-[#0a0f14] text-[#e6f0e8] min-h-screen flex flex-col" x-data="{ activeTab: 'social', pipelineOpen: false, pipelineRunning: false, pipelineStatus: '' }">
+
+    {% block content %}{% endblock %}
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

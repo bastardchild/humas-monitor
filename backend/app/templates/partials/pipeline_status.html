@@ -1,0 +1,26 @@
+<div class="space-y-2 text-xs">
+    {% if pipeline_result %}
+        {% if pipeline_result.success %}
+            <div class="p-2.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base">celebration</span>
+                <span>Pipeline Selesai! Data berhasil diperbarui.</span>
+            </div>
+        {% else %}
+            <div class="p-2.5 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300 flex items-start gap-1.5">
+                <span class="material-symbols-outlined text-base mt-0.5">error</span>
+                <div>
+                    <strong>Pipeline Error:</strong> {{ pipeline_result.error }}
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <button 
+        hx-post="/partials/pipeline/run"
+        hx-target="#pipeline-trigger-area"
+        hx-swap="innerHTML"
+        class="w-full btn-custom py-2 px-3 text-xs flex items-center justify-center gap-1.5 mt-2"
+    >
+        <span class="material-symbols-outlined text-base">rocket_launch</span> Jalankan Pipeline Lagi
+    </button>
+</div>
